@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> Music Player</title>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <style>
+        body {
+            background-color: #121212;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            padding: 20px;
+        }
+        #container {
+            display: flex;
+            width: 90%;
+            max-width: 1200px;
+            justify-content: center;
+        }
+        #left-panel {
+            width: 250px;
+            background: #1E1E1E;
+            padding: 10px;
+            border-radius: 10px;
+            overflow-y: auto;
+            text-align: center;
+        }
+        #chat-container {
+            flex: 1;
+            max-width: 300px;
+            height: 250px;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 10px;
+            overflow-y: auto;
+            background: #1E1E1E;
+            display: flex;
+            flex-direction: column;
+            text-align: center;
+        }
+        .chat {
+            padding: 8px;
+            margin: 5px;
+            border-radius: 10px;
+            max-width: 80%;
+        }
+        .user {
+            background: #6200ea;
+            align-self: flex-end;
+            text-align: right;
+        }
+        .bot {
+            background: #333;
+            align-self: flex-start;
+            text-align: left;
+        }
+        #input-container {
+            margin-top: 10px;
+            display: flex;
+            width: 100%;
+            justify-content: center;
+        }
+        input {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+        }
+        button {
+            background: #6200ea;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Music Player</h2>
+    <p>Type your song name and play instantly. The easiest music player</p>
+    <div id="container">
+        <div id="left-panel">
+            <h3>Now Playing</h3>
+            <p id="now-playing">Nothing</p>
+            <h3>Queue</h3>
+            <ul id="queue-list"></ul>
+            <div>
+                <button onclick="playPrevious()">Previous</button>
+                <button onclick="togglePlayPause()">Play/Pause</button>
+                <button onclick="playNext()">Next</button>
+            </div>
+        </div>
+        <div id="chat-container"></div>
+    </div>
+    <div id="input-container">
+        <input type="text" id="songInput" placeholder="Type a song...">
+        <button onclick="searchSong()">Search</button>
+    </div>
+    <div id="player-container" style="display:none;"><div id="player"></div></div>
+    <script>
+        let queue = [];
+        let isPlaying = false;
+        let currentVideoId = "";
+        let player;
+
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+                height: '360',
+                width: '640',
+                playerVars: { 'autoplay': 1, 'controls': 1 },
+                events: {
+                    'onReady': () => console.log("Player Ready"),
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+
+        async function searchSong() {
+            const songName = document.getElementById("songInput").value;
+            if (!songName) return;
+            addChat(songName, 'user');
+            document.getElementById("songInput").value = "";
+
+            const API_KEY = "AIzaSyBc3R-_xEr4YpseqHzD8wY94ntxEF4axI0";
+            const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(songName)}&type=video&key=${API_KEY}`;
+            
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.items && data.items.length > 0) {
+                    const videoId = data.items[0].id.videoId;
+                    const title = data.items[0].snippet.title;
+                    queue.push({ videoId, title });
+                    addChat(`Adding '${title}' to queue`, 'bot');
+                    updateQueueDisplay();
+                    if (!isPlaying) playNext();
+                } else {
+                    addChat("No results found. Try another song.", 'bot');
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                addChat("Something went wrong. Try again!", 'bot');
+            }
+        }
+
+        function playNext() {
+            if (queue.length === 0) {
+                isPlaying = false;
+                document.getElementById("now-playing").innerText = "Nothing";
+                return;
+            }
+            isPlaying = true;
+            const { videoId, title } = queue.shift();
+            currentVideoId = videoId;
+            document.getElementById("now-playing").innerText = title;
+            player.loadVideoById(videoId);
+            updateQueueDisplay();
+        }
+
+        function playPrevious() {
+            if (queue.length > 0) {
+                queue.unshift({ videoId: currentVideoId, title: document.getElementById("now-playing").innerText });
+                playNext();
+            }
+        }
+
+        function togglePlayPause() {
+            if (isPlaying) {
+                player.pauseVideo();
+                isPlaying = false;
+            } else {
+                player.playVideo();
+                isPlaying = true;
+            }
+        }
+
+        function onPlayerStateChange(event) {
+            if (event.data == YT.PlayerState.ENDED) {
+                playNext();
+            }
+        }
+
+        function updateQueueDisplay() {
+            const queueList = document.getElementById("queue-list");
+            queueList.innerHTML = "";
+            queue.forEach((song, index) => {
+                const li = document.createElement("li");
+                li.textContent = `${index + 1}. ${song.title}`;
+                queueList.appendChild(li);
+            });
+        }
+
+        function addChat(message, sender) {
+            const chatBox = document.getElementById("chat-container");
+            const chatBubble = document.createElement("div");
+            chatBubble.classList.add("chat", sender);
+            chatBubble.textContent = message;
+            chatBox.appendChild(chatBubble);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+    </script>
+</body>
+</html>
